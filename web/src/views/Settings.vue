@@ -6,24 +6,40 @@ import { useAppStore } from '../stores/app'
 import { useDialogStore } from '../stores/dialog'
 import * as settingsApi from '../api/settings'
 import * as proxyApi from '../api/proxy'
+import * as systemApi from '../api/system'
 
 const { t } = useI18n()
 const router = useRouter()
 const app = useAppStore()
 const dialog = useDialogStore()
 
-const activeTab = ref('voice')
+const activeTab = ref('ai')
 const loading = ref(false)
 const settings = ref({})
 const proxyRunning = ref(false)
 const proxyAddress = ref('')
 const proxyIP = ref('0.0.0.0')
 const proxyPort = ref(1080)
+const systemInfo = ref({ providers: {} })
 
 const tabs = computed(() => [
+    { key: 'ai', label: t('settings.tabs.ai'), icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
     { key: 'voice', label: t('settings.tabs.voice'), icon: 'M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z' },
     { key: 'proxy', label: t('settings.tabs.proxy'), icon: 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0 3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9' },
     { key: 'about', label: t('settings.tabs.about'), icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+])
+
+const providerOptions = computed(() => [
+    {
+        key: 'claude',
+        label: t('providers.claude'),
+        desc: t('settings.ai.claudeDesc'),
+    },
+    {
+        key: 'codex',
+        label: t('providers.codex'),
+        desc: t('settings.ai.codexDesc'),
+    },
 ])
 
 async function loadSettings() {
@@ -51,6 +67,15 @@ async function loadProxyStatus() {
         proxyPort.value = data.port || parseInt(settings.value['proxy.port']) || 1080
     } catch (e) {
         console.error(t('settings.proxy.statusFailed'), e)
+    }
+}
+
+async function loadSystemInfo() {
+    try {
+        const { data } = await systemApi.getInfo()
+        systemInfo.value = data.system || { providers: {} }
+    } catch {
+        systemInfo.value = { providers: {} }
     }
 }
 
@@ -107,6 +132,7 @@ async function copyProxyAddr() {
 onMounted(() => {
     loadSettings()
     loadProxyStatus()
+    loadSystemInfo()
 })
 </script>
 
@@ -146,6 +172,82 @@ onMounted(() => {
                 </div>
 
                 <div v-else>
+                    <div v-show="activeTab === 'ai'" class="space-y-6">
+                        <div class="rounded-xl border p-4" :class="app.isDark ? 'border-slate-700/50 bg-slate-800/30' : 'border-slate-200 bg-slate-50'">
+                            <h3 class="font-medium mb-2">{{ t('settings.ai.defaultProvider') }}</h3>
+                            <p class="text-xs mb-4" :class="app.isDark ? 'text-slate-400' : 'text-slate-500'">
+                                {{ t('settings.ai.defaultProviderDesc') }}
+                            </p>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <button
+                                    v-for="provider in providerOptions"
+                                    :key="provider.key"
+                                    @click="app.setDefaultProvider(provider.key)"
+                                    class="rounded-xl border px-4 py-3 text-left transition-all"
+                                    :class="app.defaultProvider === provider.key
+                                        ? (app.isDark ? 'border-cyan-400/50 bg-cyan-400/10 text-cyan-100' : 'border-cyan-300 bg-cyan-50 text-cyan-800')
+                                        : (app.isDark ? 'border-slate-700 hover:border-slate-500 hover:bg-slate-700/30' : 'border-slate-200 hover:border-slate-300 hover:bg-white')"
+                                >
+                                    <div class="flex items-center justify-between gap-3">
+                                        <span class="font-medium">{{ provider.label }}</span>
+                                        <span v-if="app.defaultProvider === provider.key" class="text-xs">{{ t('settings.ai.currentDefault') }}</span>
+                                    </div>
+                                    <p class="text-xs mt-2" :class="app.isDark ? 'text-slate-400' : 'text-slate-500'">
+                                        {{ provider.desc }}
+                                    </p>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border p-4" :class="app.isDark ? 'border-slate-700/50 bg-slate-800/30' : 'border-slate-200 bg-slate-50'">
+                            <h3 class="font-medium mb-4">{{ t('settings.ai.runtimeStatus') }}</h3>
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between rounded-lg px-3 py-2"
+                                    :class="app.isDark ? 'bg-slate-900/50' : 'bg-white'">
+                                    <span class="text-sm">{{ t('providers.claude') }}</span>
+                                    <span class="text-xs px-2 py-1 rounded-full"
+                                        :class="systemInfo.providers?.claude ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'">
+                                        {{ systemInfo.providers?.claude ? t('settings.ai.installed') : t('settings.ai.notInstalled') }}
+                                    </span>
+                                </div>
+                                <div class="flex items-center justify-between rounded-lg px-3 py-2"
+                                    :class="app.isDark ? 'bg-slate-900/50' : 'bg-white'">
+                                    <span class="text-sm">{{ t('providers.codex') }}</span>
+                                    <span class="text-xs px-2 py-1 rounded-full"
+                                        :class="systemInfo.providers?.codex ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'">
+                                        {{ systemInfo.providers?.codex ? t('settings.ai.installed') : t('settings.ai.notInstalled') }}
+                                    </span>
+                                </div>
+                                <div class="flex items-center justify-between rounded-lg px-3 py-2"
+                                    :class="app.isDark ? 'bg-slate-900/50' : 'bg-white'">
+                                    <span class="text-sm">Bubblewrap</span>
+                                    <span class="text-xs px-2 py-1 rounded-full"
+                                        :class="systemInfo.providers?.bubblewrap ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-500/15 text-slate-400'">
+                                        {{ systemInfo.providers?.bubblewrap ? t('settings.ai.installed') : t('settings.ai.optional') }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border p-4" :class="app.isDark ? 'border-slate-700/50 bg-slate-800/30' : 'border-slate-200 bg-slate-50'">
+                            <h3 class="font-medium mb-2">{{ t('settings.ai.codexGuideTitle') }}</h3>
+                            <p class="text-xs mb-4" :class="app.isDark ? 'text-slate-400' : 'text-slate-500'">
+                                {{ t('settings.ai.codexGuideDesc') }}
+                            </p>
+                            <div class="space-y-3 text-sm">
+                                <div class="rounded-lg px-3 py-2 font-mono" :class="app.isDark ? 'bg-slate-900/60 text-cyan-200' : 'bg-white text-slate-700'">
+                                    codex login --device-auth
+                                </div>
+                                <div class="rounded-lg px-3 py-2 font-mono" :class="app.isDark ? 'bg-slate-900/60 text-cyan-200' : 'bg-white text-slate-700'">
+                                    codex login --with-api-key
+                                </div>
+                            </div>
+                            <p class="text-xs mt-4" :class="app.isDark ? 'text-slate-400' : 'text-slate-500'">
+                                {{ t('settings.ai.historyNote') }}
+                            </p>
+                        </div>
+                    </div>
+
                     <div v-show="activeTab === 'voice'" class="space-y-6">
                         <div class="rounded-xl border p-4" :class="app.isDark ? 'border-slate-700/50 bg-slate-800/30' : 'border-slate-200 bg-slate-50'">
                             <div class="flex items-center justify-between mb-4">
@@ -261,7 +363,7 @@ onMounted(() => {
                                 C
                             </div>
                             <h2 class="text-xl font-semibold mb-1">CCWT</h2>
-                            <p class="text-sm" :class="app.isDark ? 'text-slate-400' : 'text-slate-500'">Claude Code Web Terminal</p>
+                            <p class="text-sm" :class="app.isDark ? 'text-slate-400' : 'text-slate-500'">Claude Code &amp; Codex CLI Web Terminal</p>
                             <p class="text-xs mt-2" :class="app.isDark ? 'text-slate-500' : 'text-slate-400'">{{ t('settings.about.version') }} 1.0.0</p>
                         </div>
 

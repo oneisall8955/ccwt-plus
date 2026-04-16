@@ -51,12 +51,12 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	if config.Cfg.Register.InviteCode == "" {
+	if !config.Cfg.Register.Open {
 		c.JSON(http.StatusForbidden, gin.H{"error": "注册已关闭"})
 		return
 	}
 
-	if req.InviteCode != config.Cfg.Register.InviteCode {
+	if config.Cfg.Register.InviteCode != "" && req.InviteCode != config.Cfg.Register.InviteCode {
 		c.JSON(http.StatusForbidden, gin.H{"error": "邀请码错误"})
 		return
 	}
@@ -90,6 +90,7 @@ func Register(c *gin.Context) {
 	// 创建用户专属目录
 	dirs := []string{
 		config.UserClaudeDir(req.Username),
+		config.UserCodexDir(req.Username),
 		config.UserWorkspace(req.Username),
 	}
 	for _, d := range dirs {

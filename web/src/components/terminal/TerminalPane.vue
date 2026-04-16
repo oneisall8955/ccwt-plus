@@ -64,6 +64,9 @@ function connect() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const token = document.cookie.split('; ').find(c => c.startsWith('token='))?.split('=')[1] || ''
     let url = `${proto}//${location.host}/ws/terminal?token=${token}`
+    if (tab?.provider) {
+        url += `&provider=${encodeURIComponent(tab.provider)}`
+    }
     if (tab?.sessionId) {
         url += `&session_id=${tab.sessionId}`
     }
@@ -87,7 +90,7 @@ function connect() {
             try {
                 const msg = JSON.parse(e.data)
                 if (msg.type === 'session') {
-                    termStore.setSession(props.tabId, msg.data)
+                    termStore.setSession(props.tabId, msg.data, msg.provider || tab?.provider)
                 } else if (msg.type === 'exit') {
                     write('\r\n\x1b[33m[会话已结束]\x1b[0m\r\n')
                 }

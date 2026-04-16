@@ -2,8 +2,13 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 
+function normalizeProvider(provider) {
+    return provider === 'codex' ? 'codex' : 'claude'
+}
+
 export const useAppStore = defineStore('app', () => {
     const theme = ref('dark')
+    const defaultProvider = ref('claude')
     const sidebarOpen = ref(true)
     const cmdPaletteOpen = ref(false)
     const termFocusMode = ref(false)
@@ -15,6 +20,10 @@ export const useAppStore = defineStore('app', () => {
         const saved = localStorage.getItem('ccwt-theme')
         if (saved) {
             theme.value = saved
+        }
+        const savedProvider = localStorage.getItem('ccwt-provider')
+        if (savedProvider) {
+            defaultProvider.value = normalizeProvider(savedProvider)
         }
         if (isMobile.value) {
             sidebarOpen.value = false
@@ -31,6 +40,11 @@ export const useAppStore = defineStore('app', () => {
     function setTheme(t) {
         theme.value = t
         localStorage.setItem('ccwt-theme', theme.value)
+    }
+
+    function setDefaultProvider(provider) {
+        defaultProvider.value = normalizeProvider(provider)
+        localStorage.setItem('ccwt-provider', defaultProvider.value)
     }
 
     function toggleSidebar() {
@@ -50,8 +64,8 @@ export const useAppStore = defineStore('app', () => {
     }
 
     return {
-        theme, sidebarOpen, cmdPaletteOpen, termFocusMode, isMobile, isDark,
+        theme, defaultProvider, sidebarOpen, cmdPaletteOpen, termFocusMode, isMobile, isDark,
         initTheme, toggleTheme, setTheme, toggleSidebar, toggleCmdPalette,
-        toggleTermFocusMode, setTermFocusMode,
+        toggleTermFocusMode, setTermFocusMode, setDefaultProvider,
     }
 })

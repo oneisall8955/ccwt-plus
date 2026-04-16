@@ -2,6 +2,7 @@ package service
 
 import (
 	"log"
+	"os/exec"
 	"runtime"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -15,6 +16,16 @@ type SystemInfo struct {
 	MemUsed    uint64  `json:"mem_used"`
 	MemPercent float64 `json:"mem_percent"`
 	GoRoutines int     `json:"goroutines"`
+	Providers  struct {
+		Claude     bool `json:"claude"`
+		Codex      bool `json:"codex"`
+		Bubblewrap bool `json:"bubblewrap"`
+	} `json:"providers"`
+}
+
+func hasCommand(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
 }
 
 // GetSystemInfo 获取系统资源信息
@@ -22,6 +33,9 @@ func GetSystemInfo() SystemInfo {
 	info := SystemInfo{
 		GoRoutines: runtime.NumGoroutine(),
 	}
+	info.Providers.Claude = hasCommand("claude")
+	info.Providers.Codex = hasCommand("codex")
+	info.Providers.Bubblewrap = hasCommand("bwrap")
 
 	cpuPercent, err := cpu.Percent(0, false)
 	if err != nil {

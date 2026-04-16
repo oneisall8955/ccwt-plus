@@ -11,20 +11,22 @@ const termStore = useTerminalStore()
 const query = ref('')
 const selectedIdx = ref(0)
 
-const commands = [
-    { id: 'new-term', label: '新建终端', icon: '🖥️', action: () => emit('action', 'newTab') },
+const commands = computed(() => [
+    { id: 'new-term', label: `新建${app.defaultProvider === 'codex' ? ' Codex' : ' Claude'}终端`, icon: '🖥️', action: () => emit('action', { type: 'newTab', provider: app.defaultProvider }) },
+    { id: 'new-codex', label: '新建 Codex 终端', icon: '⌘', action: () => emit('action', { type: 'newTab', provider: 'codex' }) },
+    { id: 'new-claude', label: '新建 Claude 终端', icon: '✦', action: () => emit('action', { type: 'newTab', provider: 'claude' }) },
     { id: 'close-term', label: '关闭当前终端', icon: '✖️', action: () => { if (termStore.activeId) termStore.removeTab(termStore.activeId) } },
     { id: 'toggle-sidebar', label: '切换侧边栏', icon: '📁', action: () => app.toggleSidebar() },
     { id: 'toggle-theme', label: '切换主题', icon: '🎨', action: () => app.toggleTheme() },
     { id: 'history', label: '会话历史', icon: '📜', action: () => router.push('/history') },
     { id: 'admin', label: '管理面板', icon: '⚙️', action: () => router.push('/admin') },
     { id: 'refresh-tree', label: '刷新文件树', icon: '🔄', action: () => emit('action', 'refreshTree') },
-]
+])
 
 const filtered = computed(() => {
-    if (!query.value) return commands
+    if (!query.value) return commands.value
     const q = query.value.toLowerCase()
-    return commands.filter(c => c.label.toLowerCase().includes(q))
+    return commands.value.filter(c => c.label.toLowerCase().includes(q))
 })
 
 function execute(cmd) {

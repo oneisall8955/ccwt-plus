@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/spf13/viper"
@@ -68,6 +69,21 @@ func UserDir(username string) string {
 // UserClaudeDir 获取用户 Claude 配置目录
 func UserClaudeDir(username string) string {
 	return filepath.Join(UserDir(username), ".claude")
+}
+
+// UserCodexDir 获取用户 Codex 配置目录
+func UserCodexDir(username string) string {
+	return filepath.Join(UserDir(username), ".codex")
+}
+
+// UserProviderDir 获取用户指定 provider 的配置目录
+func UserProviderDir(username, provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "codex":
+		return UserCodexDir(username)
+	default:
+		return UserClaudeDir(username)
+	}
 }
 
 // UserWorkspace 获取用户工作区目录

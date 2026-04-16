@@ -2,6 +2,12 @@ export default {
   app: {
     name: 'CCWT'
   },
+  providers: {
+    claude: 'Claude Code',
+    claudeShort: 'Claude',
+    codex: 'Codex CLI',
+    codexShort: 'Codex'
+  },
   nav: {
     toggleSidebar: 'Toggle Sidebar',
     language: 'Language',
@@ -14,9 +20,24 @@ export default {
   settings: {
     title: 'Settings',
     tabs: {
+      ai: 'AI Terminal',
       voice: 'Voice',
       proxy: 'Proxy',
       about: 'About'
+    },
+    ai: {
+      defaultProvider: 'Default terminal provider',
+      defaultProviderDesc: 'New terminal tabs will use this provider by default. Each tab still keeps its own provider after it is created.',
+      currentDefault: 'Default',
+      runtimeStatus: 'Runtime status',
+      installed: 'Installed',
+      notInstalled: 'Not found',
+      optional: 'Optional',
+      codexGuideTitle: 'Codex CLI quick start',
+      codexGuideDesc: 'Switch to a Codex tab, then log in and start using Codex CLI directly in the terminal. CCWT keeps each user\'s Codex state isolated under that user home.',
+      historyNote: 'The current history page is still primarily Claude-oriented; Codex CLI terminal usage works normally.',
+      claudeDesc: 'Keep using the existing Claude Code workflow.',
+      codexDesc: 'Prepare an isolated runtime for Codex CLI-heavy workflows.'
     },
     voice: {
       enable: 'Voice Recognition',
@@ -54,7 +75,7 @@ export default {
       updateAvailable: 'New version {version} available',
       checkFailed: 'Failed to check for updates',
       features: 'Features',
-      webBasedTerminal: 'Web-based Claude Code terminal',
+      webBasedTerminal: 'Web-based Claude Code / Codex CLI terminal',
       voiceInput: 'Voice command input',
       builtInProxy: 'Built-in SOCKS5 proxy',
       fileManagement: 'File management and online editing'
