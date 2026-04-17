@@ -1,0 +1,21 @@
+# Local AI / agent workspace metadata
+/.agents/
+/.trellis/
+/AGENTS.md
+
+# Build outputs
+/ccwt
+/ccwt.exe
+/ccwt.exe~
+/web/dist/
+/web/node_modules/
+
+# Runtime logs
+/ccwt.stdout.log
+/ccwt.stderr.log
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+
+/.idea

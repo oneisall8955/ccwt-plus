@@ -2,6 +2,12 @@ export default {
   app: {
     name: 'CCWT'
   },
+  providers: {
+    claude: 'Claude Code',
+    claudeShort: 'Claude',
+    codex: 'Codex CLI',
+    codexShort: 'Codex'
+  },
   nav: {
     toggleSidebar: '切换侧边栏',
     language: '语言',
@@ -14,9 +20,24 @@ export default {
   settings: {
     title: '设置',
     tabs: {
+      ai: 'AI 终端',
       voice: '语音识别',
       proxy: '代理',
       about: '关于'
+    },
+    ai: {
+      defaultProvider: '默认终端 Provider',
+      defaultProviderDesc: '新建终端会默认使用这里选择的 Provider。每个终端标签会记住自己的 Provider，不会互相覆盖。',
+      currentDefault: '当前默认',
+      runtimeStatus: '运行环境状态',
+      installed: '已安装',
+      notInstalled: '未检测到',
+      optional: '可选',
+      codexGuideTitle: 'Codex CLI 使用指引',
+      codexGuideDesc: '切到 Codex 终端后，直接在终端里登录并开始使用 Codex CLI。CCWT 会把每个用户的 Codex 状态隔离在自己的主目录下。',
+      historyNote: '当前“会话历史”页面仍主要面向 Claude 的历史格式；Codex CLI 终端可直接正常使用。',
+      claudeDesc: '继续使用现有的 Claude Code 工作流。',
+      codexDesc: '为常用 Codex CLI 的工作流准备隔离运行环境。'
     },
     voice: {
       enable: '语音识别开关',
@@ -54,7 +75,7 @@ export default {
       updateAvailable: '发现新版本 {version}',
       checkFailed: '检测更新失败',
       features: '功能说明',
-      webBasedTerminal: '基于 Web 的 Claude Code 终端',
+      webBasedTerminal: '基于 Web 的 Claude Code / Codex CLI 终端',
       voiceInput: '支持语音输入命令',
       builtInProxy: '内置 SOCKS5 代理',
       fileManagement: '文件管理和在线编辑'

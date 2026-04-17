@@ -30,10 +30,19 @@ function setLanguage(code) {
 
 const emit = defineEmits(['voiceResult'])
 
+const providerOptions = [
+    { key: 'claude', labelKey: 'providers.claudeShort' },
+    { key: 'codex', labelKey: 'providers.codexShort' }
+]
+
 async function doLogout() {
     termStore.reset('anonymous')
     await auth.logout()
     router.push('/login')
+}
+
+function setProvider(provider) {
+    app.setDefaultProvider(provider)
 }
 
 // 点击其他地方关闭下拉菜单
@@ -79,6 +88,22 @@ onUnmounted(() => {
         </div>
 
         <div class="flex-1"></div>
+
+        <div class="hidden md:flex items-center gap-1 p-1 rounded-xl border"
+            :class="app.isDark ? 'bg-slate-800/70 border-slate-700/60' : 'bg-white/80 border-slate-200'">
+            <button
+                v-for="provider in providerOptions"
+                :key="provider.key"
+                @click="setProvider(provider.key)"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                :class="app.defaultProvider === provider.key
+                    ? (app.isDark ? 'bg-cyan-400/15 text-cyan-100' : 'bg-cyan-50 text-cyan-700')
+                    : (app.isDark ? 'text-slate-400 hover:text-slate-100 hover:bg-white/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100')"
+                :title="t('settings.ai.defaultProvider')"
+            >
+                {{ t(provider.labelKey) }}
+            </button>
+        </div>
 
         <!-- 语音输入 -->
         <button @click="showVoice = !showVoice"

@@ -5,6 +5,10 @@ let tabCounter = 0
 const STORAGE_KEY_PREFIX = 'ccwt-terminal-state'
 const LEGACY_STORAGE_KEY = 'ccwt-terminal-state'
 
+function normalizeProvider(provider) {
+    return provider === 'codex' ? 'codex' : 'claude'
+}
+
 export const useTerminalStore = defineStore('terminal', () => {
     const tabs = ref([])
     const activeId = ref(null)
@@ -62,6 +66,7 @@ export const useTerminalStore = defineStore('terminal', () => {
                     id: t.id,
                     name: typeof t.name === 'string' && t.name.trim() ? t.name : `终端 ${i + 1}`,
                     sessionId: typeof t.sessionId === 'string' && t.sessionId ? t.sessionId : null,
+                    provider: normalizeProvider(t.provider),
                 }))
 
             tabs.value = restored
@@ -78,13 +83,14 @@ export const useTerminalStore = defineStore('terminal', () => {
         }
     }
 
-    function addTab(name) {
+    function addTab(name, provider = 'claude') {
         tabCounter++
         const id = `term-${tabCounter}`
         const tab = {
             id,
             name: name || `终端 ${tabCounter}`,
             sessionId: null, // 由 WebSocket 连接后填充
+            provider: normalizeProvider(provider),
         }
         tabs.value.push(tab)
         activeId.value = id
@@ -113,9 +119,14 @@ export const useTerminalStore = defineStore('terminal', () => {
         persist()
     }
 
-    function setSession(tabId, sessionId) {
+    function setSession(tabId, sessionId, provider) {
         const tab = tabs.value.find(t => t.id === tabId)
-        if (tab) tab.sessionId = sessionId
+        if (tab) {
+            tab.sessionId = sessionId
+            if (provider) {
+                tab.provider = normalizeProvider(provider)
+            }
+        }
         persist()
     }
 

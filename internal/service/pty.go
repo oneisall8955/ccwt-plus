@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -23,11 +24,14 @@ const (
 type PtySession struct {
 	ID       string
 	UserName string
+	Provider string
 	Cmd      *exec.Cmd
-	Pty      *os.File
+	Pty      io.ReadWriteCloser
 	Buf      *RingBuffer
 	CreateAt time.Time
 	mu       sync.Mutex
+	resizeFn func(rows, cols uint16) error
+	cleanup  func()
 	// 订阅者：WebSocket 连接订阅输出
 	subs   []chan []byte
 	subsMu sync.Mutex
@@ -258,6 +262,8 @@ func filterEnvForSandbox(base []string) []string {
 func remapHomeInEnv(base []string, targetHome string) []string {
 	sourceHome, _ := os.UserHomeDir()
 	m := envToMap(base)
+	delete(m, "CLAUDE_CONFIG_DIR")
+	delete(m, "CODEX_HOME")
 	delete(m, "PWD")
 	delete(m, "OLDPWD")
 	delete(m, "PROMPT_COMMAND")
@@ -287,7 +293,31 @@ func appendRoBindIntoIfExists(args []string, hostPath, sandboxPath string) []str
 	return args
 }
 
-func buildBubblewrapCommand(username, shell string) (*exec.Cmd, error) {
+func buildProviderEnv(username, provider, shell, homeDir, workspace string) map[string]string {
+	env := map[string]string{
+		"HOME":             homeDir,
+		"HISTFILE":         filepath.Join(homeDir, ".bash_history"),
+		"__CCWT_WORKSPACE": workspace,
+		"CCWT_USER":        username,
+		"CCWT_AI_PROVIDER": provider,
+		"USER":             username,
+		"LOGNAME":          username,
+		"TERM":             "xterm-256color",
+		"SHELL":            shell,
+		"PWD":              workspace,
+	}
+
+	switch provider {
+	case ProviderCodex:
+		env["CODEX_HOME"] = filepath.Join(homeDir, ".codex")
+	default:
+		env["CLAUDE_CONFIG_DIR"] = config.UserClaudeDir(username)
+	}
+
+	return env
+}
+
+func buildBubblewrapCommand(username, provider, shell string) (*exec.Cmd, error) {
 	bwrap, err := exec.LookPath("bwrap")
 	if err != nil {
 		return nil, err
@@ -300,6 +330,7 @@ func buildBubblewrapCommand(username, shell string) (*exec.Cmd, error) {
 	sbHome := "/home/ccwt"
 	sbWorkspace := sbHome + "/workspace"
 	sbClaudeDir := sbHome + "/.claude"
+	sbCodexDir := sbHome + "/.codex"
 	sbBashrc := sbHome + "/.ccwt_bashrc"
 	sbHistory := sbHome + "/.bash_history"
 
@@ -315,14 +346,19 @@ func buildBubblewrapCommand(username, shell string) (*exec.Cmd, error) {
 		"--bind", userHome, sbHome,
 		"--chdir", sbWorkspace,
 		"--setenv", "HOME", sbHome,
-		"--setenv", "CLAUDE_CONFIG_DIR", sbClaudeDir,
 		"--setenv", "HISTFILE", sbHistory,
 		"--setenv", "__CCWT_WORKSPACE", sbWorkspace,
 		"--setenv", "CCWT_USER", username,
+		"--setenv", "CCWT_AI_PROVIDER", provider,
 		"--setenv", "USER", username,
 		"--setenv", "LOGNAME", username,
 		"--setenv", "TERM", "xterm-256color",
 		"--setenv", "SHELL", shell,
+	}
+	if provider == ProviderCodex {
+		args = append(args, "--setenv", "CODEX_HOME", sbCodexDir)
+	} else {
+		args = append(args, "--setenv", "CLAUDE_CONFIG_DIR", sbClaudeDir)
 	}
 	args = appendRoBindIfExists(args, "/bin")
 	args = appendRoBindIfExists(args, "/usr")
@@ -341,18 +377,7 @@ func buildBubblewrapCommand(username, shell string) (*exec.Cmd, error) {
 
 	cmd := exec.Command(bwrap, args...)
 	cmd.Dir = workspace
-	cmd.Env = mergeEnv(filterEnvForSandbox(os.Environ()), map[string]string{
-		"HOME":              userHome,
-		"CLAUDE_CONFIG_DIR": config.UserClaudeDir(username),
-		"HISTFILE":          filepath.Join(userHome, ".bash_history"),
-		"__CCWT_WORKSPACE":  workspace,
-		"CCWT_USER":         username,
-		"USER":              username,
-		"LOGNAME":           username,
-		"TERM":              "xterm-256color",
-		"SHELL":             shell,
-		"PWD":               workspace,
-	})
+	cmd.Env = mergeEnv(filterEnvForSandbox(os.Environ()), buildProviderEnv(username, provider, shell, userHome, workspace))
 	return cmd, nil
 }
 
@@ -363,6 +388,7 @@ func writeBashInit(username string) (string, error) {
 	content := `# CCWT managed bash init
 export HOME="${HOME:-$PWD}"
 export CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 export HISTFILE="${HISTFILE:-$HOME/.bash_history}"
 export __CCWT_WORKSPACE="${__CCWT_WORKSPACE:-$HOME/workspace}"
 export COLORTERM=truecolor
@@ -431,6 +457,7 @@ func ensureUserRuntimeDirs(username string) error {
 	dirs := []string{
 		config.UserDir(username),
 		config.UserClaudeDir(username),
+		config.UserCodexDir(username),
 		config.UserWorkspace(username),
 	}
 	for _, d := range dirs {
@@ -467,58 +494,108 @@ fi
 	return nil
 }
 
-// Create 创建新的 PTY 会话
-func (m *PtyManager) Create(id, username string, rows, cols uint16) (*PtySession, error) {
-	if err := ensureUserRuntimeDirs(username); err != nil {
-		log.Printf("用户目录初始化失败: user=%s err=%v", username, err)
-		return nil, err
+func resolveShell() string {
+	if runtime.GOOS == "windows" {
+		if shell := os.Getenv("SHELL"); shell != "" {
+			name := strings.ToLower(filepath.Base(shell))
+			if name == "pwsh.exe" || name == "pwsh" || name == "cmd.exe" || name == "cmd" {
+				return shell
+			}
+		}
+		for _, candidate := range []string{"pwsh.exe", "cmd.exe", "powershell.exe"} {
+			if p, err := exec.LookPath(candidate); err == nil {
+				return p
+			}
+		}
+		if shell := os.Getenv("COMSPEC"); shell != "" {
+			if p, err := exec.LookPath(shell); err == nil {
+				return p
+			}
+		}
+		return "cmd.exe"
 	}
 
 	shell := os.Getenv("SHELL")
 	if shell == "" || !strings.Contains(filepath.Base(shell), "bash") {
 		shell = "/bin/bash"
 	}
+	return shell
+}
 
-	bashInit, err := writeBashInit(username)
-	if err != nil {
-		log.Printf("写入 bash 初始化文件失败: user=%s err=%v", username, err)
+// Create 创建新的 PTY 会话
+func (m *PtyManager) Create(id, username, provider string, rows, cols uint16) (*PtySession, error) {
+	if err := ensureUserRuntimeDirs(username); err != nil {
+		log.Printf("用户目录初始化失败: user=%s err=%v", username, err)
 		return nil, err
 	}
+	provider = NormalizeProvider(provider)
 
-	cmd := exec.Command(shell, "--noprofile", "--rcfile", bashInit, "-i")
-	if bwrapCmd, berr := buildBubblewrapCommand(username, shell); berr == nil {
-		cmd = bwrapCmd
-		log.Printf("PTY 隔离模式: user=%s mode=bwrap", username)
+	shell := resolveShell()
+	workspace := config.UserWorkspace(username)
+	userHome := config.UserDir(username)
+	env := buildProviderEnv(username, provider, shell, userHome, workspace)
+
+	var (
+		cmd      *exec.Cmd
+		terminal io.ReadWriteCloser
+		resizeFn func(rows, cols uint16) error
+		cleanup  func()
+		err      error
+	)
+
+	if runtime.GOOS == "windows" {
+		windowsEnv := mergeEnv(os.Environ(), env)
+		terminal, resizeFn, cleanup, err = startWindowsPTY(shell, workspace, windowsEnv, rows, cols)
+		if err != nil {
+			log.Printf("PTY 创建失败: user=%s id=%s err=%v", username, id, err)
+			return nil, err
+		}
+		log.Printf("PTY 隔离模式: user=%s provider=%s mode=windows-conpty", username, provider)
 	} else {
-		cmd.Dir = config.UserWorkspace(username)
-		cmd.Env = mergeEnv(remapHomeInEnv(os.Environ(), config.UserDir(username)), map[string]string{
-			"CLAUDE_CONFIG_DIR": config.UserClaudeDir(username),
-			"HOME":              config.UserDir(username),
-			"HISTFILE":          filepath.Join(config.UserDir(username), ".bash_history"),
-			"__CCWT_WORKSPACE":  config.UserWorkspace(username),
-			"CCWT_USER":         username,
-			"USER":              username,
-			"LOGNAME":           username,
-			"TERM":              "xterm-256color",
-			"SHELL":             shell,
-			"PWD":               config.UserWorkspace(username),
-		})
-		log.Printf("PTY 隔离模式: user=%s mode=soft-shell-only reason=%v", username, berr)
-	}
+		bashInit, err := writeBashInit(username)
+		if err != nil {
+			log.Printf("写入 bash 初始化文件失败: user=%s err=%v", username, err)
+			return nil, err
+		}
 
-	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: rows, Cols: cols})
-	if err != nil {
-		log.Printf("PTY 创建失败: user=%s id=%s err=%v", username, id, err)
-		return nil, err
+		cmd = exec.Command(shell, "--noprofile", "--rcfile", bashInit, "-i")
+		if bwrapCmd, berr := buildBubblewrapCommand(username, provider, shell); berr == nil {
+			cmd = bwrapCmd
+			log.Printf("PTY 隔离模式: user=%s provider=%s mode=bwrap", username, provider)
+		} else {
+			cmd.Dir = workspace
+			cmd.Env = mergeEnv(remapHomeInEnv(os.Environ(), userHome), env)
+			log.Printf("PTY 隔离模式: user=%s provider=%s mode=soft-shell-only reason=%v", username, provider, berr)
+		}
+
+		ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: rows, Cols: cols})
+		if err != nil {
+			log.Printf("PTY 创建失败: user=%s id=%s err=%v", username, id, err)
+			return nil, err
+		}
+		terminal = ptmx
+		resizeFn = func(rows, cols uint16) error {
+			return pty.Setsize(ptmx, &pty.Winsize{Rows: rows, Cols: cols})
+		}
+		cleanup = func() {
+			_ = ptmx.Close()
+			if cmd != nil && cmd.Process != nil {
+				_ = cmd.Process.Kill()
+				_, _ = cmd.Process.Wait()
+			}
+		}
 	}
 
 	sess := &PtySession{
 		ID:       id,
 		UserName: username,
+		Provider: provider,
 		Cmd:      cmd,
-		Pty:      ptmx,
+		Pty:      terminal,
 		Buf:      NewRingBuffer(maxScrollback),
 		CreateAt: time.Now(),
+		resizeFn: resizeFn,
+		cleanup:  cleanup,
 		done:     make(chan struct{}),
 	}
 
@@ -531,7 +608,7 @@ func (m *PtyManager) Create(id, username string, rows, cols uint16) (*PtySession
 		defer close(sess.done)
 		buf := make([]byte, 4096)
 		for {
-			n, err := ptmx.Read(buf)
+			n, err := sess.Pty.Read(buf)
 			if n > 0 {
 				sess.Buf.Write(buf[:n])
 				sess.broadcast(buf[:n])
@@ -573,7 +650,10 @@ func (m *PtyManager) Resize(id string, rows, cols uint16) error {
 	}
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
-	return pty.Setsize(sess.Pty, &pty.Winsize{Rows: rows, Cols: cols})
+	if sess.resizeFn == nil {
+		return nil
+	}
+	return sess.resizeFn(rows, cols)
 }
 
 func (m *PtyManager) Close(id string) {
@@ -585,9 +665,11 @@ func (m *PtyManager) Close(id string) {
 	m.mu.Unlock()
 
 	if sess != nil {
-		sess.Pty.Close()
-		sess.Cmd.Process.Kill()
-		sess.Cmd.Wait()
+		if sess.cleanup != nil {
+			sess.cleanup()
+		} else {
+			_ = sess.Pty.Close()
+		}
 	}
 }
 

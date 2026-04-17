@@ -49,7 +49,7 @@ async function submit() {
                     </svg>
                 </div>
                 <h1 class="text-3xl font-bold text-white tracking-tight">CCWT</h1>
-                <p class="text-slate-400 mt-1">Claude Code Web Terminal</p>
+                <p class="text-slate-400 mt-1">Claude Code &amp; Codex CLI Web Terminal</p>
             </div>
 
             <!-- 表单卡片 -->
@@ -123,7 +123,7 @@ async function submit() {
             </div>
 
             <p class="text-center text-slate-500 text-xs mt-6">
-                首个注册的用户将自动成为管理员
+                首个注册的用户将自动成为管理员，支持 Claude Code 与 Codex CLI
             </p>
             </div>
         </div>

@@ -55,14 +55,18 @@ func TerminalWS(c *gin.Context) {
 	defer conn.Close()
 
 	sessID := c.Query("session_id")
+	provider := service.NormalizeProvider(c.DefaultQuery("provider", service.ProviderClaude))
 	rows := uint16(24)
 	cols := uint16(80)
 
 	// 会话归属校验：禁止跨用户复用 session_id
 	if sessID != "" {
-		if existing := service.Pty.Get(sessID); existing != nil && existing.UserName != claims.Username {
-			c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该终端会话"})
-			return
+		if existing := service.Pty.Get(sessID); existing != nil {
+			if existing.UserName != claims.Username {
+				c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该终端会话"})
+				return
+			}
+			provider = existing.Provider
 		}
 	}
 
@@ -73,16 +77,16 @@ func TerminalWS(c *gin.Context) {
 	}
 	if sess == nil {
 		sessID = uuid.New().String()
-		sess, err = service.Pty.Create(sessID, claims.Username, rows, cols)
+		sess, err = service.Pty.Create(sessID, claims.Username, provider, rows, cols)
 		if err != nil {
-			log.Printf("PTY 创建失败: user=%s err=%v", claims.Username, err)
+			log.Printf("PTY 创建失败: user=%s provider=%s err=%v", claims.Username, provider, err)
 			conn.WriteJSON(gin.H{"type": "error", "data": "终端创建失败"})
 			return
 		}
 	}
 
 	// 发送会话 ID
-	conn.WriteJSON(gin.H{"type": "session", "data": sessID})
+	conn.WriteJSON(gin.H{"type": "session", "data": sessID, "provider": sess.Provider})
 
 	// 发送回滚缓冲区数据（断线重连恢复）
 	if buf := sess.Buf.Bytes(); len(buf) > 0 {
@@ -164,7 +168,7 @@ func ListTerminals(c *gin.Context) {
 	sessions := service.Pty.List(username.(string))
 	var out []gin.H
 	for _, s := range sessions {
-		out = append(out, gin.H{"id": s.ID, "created_at": s.CreateAt})
+		out = append(out, gin.H{"id": s.ID, "created_at": s.CreateAt, "provider": s.Provider})
 	}
 	if out == nil {
 		out = []gin.H{}

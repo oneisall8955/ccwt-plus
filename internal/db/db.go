@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/ccwt/ccwt/internal/config"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 var (
@@ -20,7 +20,7 @@ func Init() {
 	once.Do(func() {
 		dbPath := filepath.Join(config.DataDir(), "ccwt.db")
 		var err error
-		DB, err = sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+		DB, err = sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 		if err != nil {
 			log.Fatalf("打开数据库失败: %v", err)
 		}

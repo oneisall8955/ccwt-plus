@@ -44,6 +44,6 @@ onUnmounted(() => clearInterval(timer))
             MEM {{ formatMB(info.mem_used) }}MB
         </span>
         <span class="flex-1"></span>
-        <span class="uppercase tracking-[0.08em] text-[10px] opacity-80">CCWT v1.0</span>
+        <span class="uppercase tracking-[0.08em] text-[10px] opacity-80">CCWT · Claude + Codex</span>
     </footer>
 </template>

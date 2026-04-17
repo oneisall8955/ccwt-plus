@@ -28,8 +28,8 @@ onMounted(async () => {
     }
 })
 
-function newTab() {
-    termStore.addTab()
+function newTab(provider = app.defaultProvider) {
+    termStore.addTab(undefined, provider)
 }
 
 // 文件树点击目录 → 向活跃终端发送 cd 命令
@@ -78,6 +78,7 @@ function handleVirtualKey(key) {
 // 命令面板操作
 function handleCmdAction(action) {
     if (action === 'newTab') newTab()
+    else if (action?.type === 'newTab') newTab(action.provider)
     else if (action === 'refreshTree') fileStore.loadTree()
 }
 
